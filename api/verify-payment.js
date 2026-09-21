@@ -1,81 +1,73 @@
-const { createClient } = require('@supabase/supabase-js');
-
 const {
-  getEnvironment,
   verifyPaystackTransaction,
-  jsonResponse
+  json,
+  addCors
 } = require('./_paystack');
 
-function getSupabaseAdmin() {
-  return createClient(
-    getEnvironment('SUPABASE_URL'),
-    getEnvironment('SUPABASE_SERVICE_ROLE_KEY')
-  );
-}
+const {
+  getSupabaseAdmin
+} = require('../lib/supabase-admin');
 
-exports.handler = async function (event) {
-  if (event.httpMethod === 'OPTIONS') {
-    return jsonResponse(204, {});
+module.exports = async function handler(req, res) {
+  addCors(res);
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
   }
 
-  if (event.httpMethod !== 'POST') {
-    return jsonResponse(405, {
+  if (req.method !== 'POST') {
+    return json(res, 405, {
       error: 'Method not allowed.'
     });
   }
 
   try {
-    const body = JSON.parse(event.body || '{}');
-    const reference = String(body.reference || '').trim();
+    const reference = String(req.body?.reference || '')
+      .trim();
 
     if (!reference) {
-      return jsonResponse(400, {
+      return json(res, 400, {
         error: 'Payment reference is required.'
       });
     }
 
-    const transaction = await verifyPaystackTransaction(reference);
-    const email = String(transaction.customer.email)
-      .trim()
-      .toLowerCase();
+    const transaction =
+      await verifyPaystackTransaction(reference);
+
+    const email = String(
+      transaction.customer?.email || ''
+    ).trim().toLowerCase();
+
+    if (!email) {
+      throw new Error(
+        'Paystack did not return a customer email.'
+      );
+    }
 
     const supabase = getSupabaseAdmin();
 
-    const { data: users, error: userError } =
-      await supabase.auth.admin.listUsers({
-        page: 1,
-        perPage: 1000
-      });
-
-    if (userError) {
-      throw userError;
-    }
-
-    const matchingUser = users.users.find(
-      user => user.email && user.email.toLowerCase() === email
-    );
-
-    const { error: purchaseError } = await supabase
+    const { error } = await supabase
       .from('purchases')
       .upsert(
         {
-          user_id: matchingUser ? matchingUser.id : null,
           email,
           reference: transaction.reference,
-          amount_kobo: transaction.amount,
+          amount_kobo: Number(transaction.amount),
           status: 'success',
-          paid_at: transaction.paid_at || new Date().toISOString()
+          paid_at:
+            transaction.paid_at ||
+            new Date().toISOString()
         },
         {
           onConflict: 'reference'
         }
       );
 
-    if (purchaseError) {
-      throw purchaseError;
+    if (error) {
+      throw error;
     }
 
-    return jsonResponse(200, {
+    return json(res, 200, {
       paid: true,
       email,
       reference: transaction.reference
@@ -83,9 +75,10 @@ exports.handler = async function (event) {
   } catch (error) {
     console.error(error);
 
-    return jsonResponse(400, {
+    return json(res, 400, {
       paid: false,
-      error: error.message || 'Payment verification failed.'
+      error: error.message ||
+        'Payment verification failed.'
     });
   }
 };
