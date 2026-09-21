@@ -1,37 +1,35 @@
-const { createClient } = require('@supabase/supabase-js');
-
 const {
-  getEnvironment,
   verifyPaystackTransaction,
-  isValidPaystackSignature,
-  jsonResponse
+  json,
+  isValidPaystackSignature
 } = require('./_paystack');
 
-function getSupabaseAdmin() {
-  return createClient(
-    getEnvironment('SUPABASE_URL'),
-    getEnvironment('SUPABASE_SERVICE_ROLE_KEY')
-  );
-}
+const {
+  getSupabaseAdmin
+} = require('../lib/supabase-admin');
 
-exports.handler = async function (event) {
-  if (event.httpMethod !== 'POST') {
-    return jsonResponse(405, {
+module.exports = async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({
       error: 'Method not allowed.'
     });
   }
 
   try {
     const signature =
-      event.headers['x-paystack-signature'] ||
-      event.headers['X-Paystack-Signature'];
+      req.headers['x-paystack-signature'];
 
-    const rawBody = event.isBase64Encoded
-      ? Buffer.from(event.body, 'base64').toString('utf8')
-      : event.body || '';
+    /*
+     * This requires Vercel to provide the raw request body.
+     * The config below disables automatic JSON parsing.
+     */
+    const rawBody = req.body;
 
-    if (!isValidPaystackSignature(rawBody, signature)) {
-      return jsonResponse(401, {
+    if (
+      typeof rawBody !== 'string' ||
+      !isValidPaystackSignature(rawBody, signature)
+    ) {
+      return res.status(401).json({
         error: 'Invalid Paystack signature.'
       });
     }
@@ -39,44 +37,33 @@ exports.handler = async function (event) {
     const payload = JSON.parse(rawBody);
 
     if (payload.event !== 'charge.success') {
-      return jsonResponse(200, {
+      return res.status(200).json({
         received: true,
         ignored: true
       });
     }
 
-    const reference = payload.data && payload.data.reference;
-    const transaction = await verifyPaystackTransaction(reference);
-    const email = String(transaction.customer.email)
-      .trim()
-      .toLowerCase();
+    const reference = payload.data?.reference;
+    const transaction =
+      await verifyPaystackTransaction(reference);
+
+    const email = String(
+      transaction.customer?.email || ''
+    ).trim().toLowerCase();
 
     const supabase = getSupabaseAdmin();
-
-    const { data: users, error: userError } =
-      await supabase.auth.admin.listUsers({
-        page: 1,
-        perPage: 1000
-      });
-
-    if (userError) {
-      throw userError;
-    }
-
-    const matchingUser = users.users.find(
-      user => user.email && user.email.toLowerCase() === email
-    );
 
     const { error } = await supabase
       .from('purchases')
       .upsert(
         {
-          user_id: matchingUser ? matchingUser.id : null,
           email,
           reference: transaction.reference,
-          amount_kobo: transaction.amount,
+          amount_kobo: Number(transaction.amount),
           status: 'success',
-          paid_at: transaction.paid_at || new Date().toISOString()
+          paid_at:
+            transaction.paid_at ||
+            new Date().toISOString()
         },
         {
           onConflict: 'reference'
@@ -87,14 +74,20 @@ exports.handler = async function (event) {
       throw error;
     }
 
-    return jsonResponse(200, {
+    return res.status(200).json({
       received: true
     });
   } catch (error) {
     console.error(error);
 
-    return jsonResponse(500, {
+    return res.status(500).json({
       error: 'Webhook processing failed.'
     });
+  }
+};
+
+module.exports.config = {
+  api: {
+    bodyParser: false
   }
 };
