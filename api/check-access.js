@@ -1,78 +1,74 @@
-const { createClient } = require('@supabase/supabase-js');
-
 const {
-  getEnvironment,
-  jsonResponse
+  json,
+  addCors
 } = require('./_paystack');
 
-function getSupabaseAdmin() {
-  return createClient(
-    getEnvironment('SUPABASE_URL'),
-    getEnvironment('SUPABASE_SERVICE_ROLE_KEY')
-  );
-}
+const {
+  getSupabaseAdmin
+} = require('../lib/supabase-admin');
 
-exports.handler = async function (event) {
-  if (event.httpMethod === 'OPTIONS') {
-    return jsonResponse(204, {});
+module.exports = async function handler(req, res) {
+  addCors(res);
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
   }
 
-  if (event.httpMethod !== 'GET') {
-    return jsonResponse(405, {
+  if (req.method !== 'GET') {
+    return json(res, 405, {
       error: 'Method not allowed.'
     });
   }
 
   try {
     const authorization =
-      event.headers.authorization ||
-      event.headers.Authorization ||
-      '';
+      req.headers.authorization || '';
 
     if (!authorization.startsWith('Bearer ')) {
-      return jsonResponse(401, {
+      return json(res, 401, {
         paid: false,
-        error: 'You must be signed in.'
+        error: 'Sign-in required.'
       });
     }
 
-    const accessToken = authorization.replace('Bearer ', '');
+    const token = authorization.substring(7);
     const supabase = getSupabaseAdmin();
 
     const {
       data: { user },
       error: userError
-    } = await supabase.auth.getUser(accessToken);
+    } = await supabase.auth.getUser(token);
 
     if (userError || !user) {
-      return jsonResponse(401, {
+      return json(res, 401, {
         paid: false,
         error: 'Invalid login session.'
       });
     }
 
-    const { data: purchase, error: purchaseError } =
+    const { data: purchase, error } =
       await supabase
         .from('purchases')
         .select('reference, paid_at')
-        .eq('user_id', user.id)
+        .eq('email', user.email.toLowerCase())
         .eq('status', 'success')
+        .eq('amount_kobo', 20000)
         .limit(1)
         .maybeSingle();
 
-    if (purchaseError) {
-      throw purchaseError;
+    if (error) {
+      throw error;
     }
 
-    return jsonResponse(200, {
+    return json(res, 200, {
       paid: Boolean(purchase),
       email: user.email,
-      reference: purchase ? purchase.reference : null
+      reference: purchase?.reference || null
     });
   } catch (error) {
     console.error(error);
 
-    return jsonResponse(500, {
+    return json(res, 500, {
       paid: false,
       error: 'Unable to check access.'
     });
