@@ -172,3 +172,27 @@ function getEmail() {
 
   return email;
 }
+window.addEventListener(
+  'paid-access-granted',
+  () => {
+    if (typeof renderChapterRail === 'function') {
+      renderChapterRail();
+    }
+
+    if (typeof renderAll === 'function') {
+      renderAll();
+    }
+  }
+);
+
+document.addEventListener('click', event => {
+  if (event.target.id !== 'paywall-pay-button') {
+    return;
+  }
+
+  const payButton = document.getElementById('pay-button');
+
+  if (payButton) {
+    payButton.click();
+  }
+});
