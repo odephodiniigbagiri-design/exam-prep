@@ -1,8 +1,8 @@
 const SUPABASE_URL =
-  'https://YOUR_PROJECT_ID.supabase.co';
+  'https://ijapytnwikzovdhsgcnh.supabase.co';
 
 const SUPABASE_ANON_KEY =
-  'YOUR_SUPABASE_ANON_KEY';
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlqYXB5dG53aWt6b3ZkaHNnY25oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3NzU2ODAsImV4cCI6MjEwNTM1MTY4MH0.O51p37THBEDrYZym7nF2x4TWM974uM66o4H55qGL0RE';
 
 const supabaseClient = window.supabase.createClient(
   SUPABASE_URL,
