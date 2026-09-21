@@ -1,44 +1,49 @@
 const {
   getEnvironment,
-  jsonResponse
+  json,
+  addCors
 } = require('./_paystack');
 
-exports.handler = async function (event) {
-  if (event.httpMethod === 'OPTIONS') {
-    return jsonResponse(204, {});
+module.exports = async function handler(req, res) {
+  addCors(res);
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
   }
 
-  if (event.httpMethod !== 'POST') {
-    return jsonResponse(405, {
+  if (req.method !== 'POST') {
+    return json(res, 405, {
       error: 'Method not allowed.'
     });
   }
 
   try {
-    const body = JSON.parse(event.body || '{}');
-    const email = String(body.email || '').trim().toLowerCase();
+    const email = String(req.body?.email || '')
+      .trim()
+      .toLowerCase();
 
     if (!email || !email.includes('@')) {
-      return jsonResponse(400, {
+      return json(res, 400, {
         error: 'A valid email address is required.'
       });
     }
-
-    const secretKey = getEnvironment('PAYSTACK_SECRET_KEY');
-    const siteUrl = getEnvironment('SITE_URL');
 
     const response = await fetch(
       'https://api.paystack.co/transaction/initialize',
       {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${secretKey}`,
+          Authorization: `Bearer ${getEnvironment(
+            'PAYSTACK_SECRET_KEY'
+          )}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           email,
           amount: 20000,
-          callback_url: `${siteUrl}/payment-success.html`
+          callback_url: `${getEnvironment(
+            'SITE_URL'
+          )}/payment-success.html`
         })
       }
     );
@@ -46,20 +51,19 @@ exports.handler = async function (event) {
     const result = await response.json();
 
     if (!response.ok || !result.status) {
-      return jsonResponse(400, {
-        error: result.message || 'Unable to initialize payment.'
+      return json(res, 400, {
+        error: result.message || 'Unable to start payment.'
       });
     }
 
-    return jsonResponse(200, {
+    return json(res, 200, {
       authorization_url: result.data.authorization_url,
-      access_code: result.data.access_code,
       reference: result.data.reference
     });
   } catch (error) {
     console.error(error);
 
-    return jsonResponse(500, {
+    return json(res, 500, {
       error: 'Payment initialization failed.'
     });
   }
