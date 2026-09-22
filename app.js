@@ -28,34 +28,51 @@ function addAuthenticationUI() {
   const authBox = document.createElement('div');
   authBox.id = 'auth-box';
   authBox.innerHTML = `
-    <input
-      id="auth-email"
-      type="email"
-      placeholder="Your email address"
-      autocomplete="email"
-    >
-    <button id="send-login-button">
-      Sign in
-    </button>
-    <button id="pay-button">
-      Pay ₦200
-    </button>
+    <div id="login-section">
+      <input
+        id="login-email"
+        type="email"
+        placeholder="Email"
+        autocomplete="email"
+      >
+      <input
+        id="login-password"
+        type="password"
+        placeholder="Password"
+        autocomplete="current-password"
+      >
+      <button id="login-button">
+        Log in
+      </button>
+    </div>
     <p id="auth-message"></p>
+    <div id="pay-section">
+      <input
+        id="pay-email"
+        type="email"
+        placeholder="Email for payment"
+        autocomplete="email"
+      >
+      <button id="pay-button">
+        Pay ₦200
+      </button>
+    </div>
   `;
 
   header.appendChild(authBox);
 
   document
-    .getElementById('send-login-button')
-    .addEventListener('click', sendLoginLink);
+    .getElementById('login-button')
+    .addEventListener('click', loginWithPassword);
 
   document
     .getElementById('pay-button')
     .addEventListener('click', startPayment);
 }
 
-async function sendLoginLink() {
-  const email = getEmail();
+async function loginWithPassword() {
+  const email = getEmail('login-email');
+  const password = document.getElementById('login-password').value;
   const message = document.getElementById('auth-message');
 
   if (!email) {
@@ -63,11 +80,16 @@ async function sendLoginLink() {
     return;
   }
 
-  const { error } = await supabaseClient.auth.signInWithOtp({
+  if (!password) {
+    message.textContent = 'Enter your password.';
+    return;
+  }
+
+  message.textContent = 'Logging in...';
+
+  const { error } = await supabaseClient.auth.signInWithPassword({
     email,
-    options: {
-      emailRedirectTo: window.location.origin
-    }
+    password
   });
 
   if (error) {
@@ -76,12 +98,11 @@ async function sendLoginLink() {
     return;
   }
 
-  message.textContent =
-    'Check your email and click the sign-in link.';
+  message.textContent = '';
 }
 
 async function startPayment() {
-  const email = getEmail();
+  const email = getEmail('pay-email');
   const message = document.getElementById('auth-message');
 
   if (!email) {
@@ -157,8 +178,8 @@ async function checkAccess(accessToken) {
   }
 }
 
-function getEmail() {
-  const input = document.getElementById('auth-email');
+function getEmail(inputId) {
+  const input = document.getElementById(inputId);
 
   if (!input) {
     return '';
@@ -172,6 +193,7 @@ function getEmail() {
 
   return email;
 }
+
 window.addEventListener(
   'paid-access-granted',
   () => {
@@ -190,7 +212,13 @@ document.addEventListener('click', event => {
     return;
   }
 
+  const payEmail = document.getElementById('pay-email');
   const payButton = document.getElementById('pay-button');
+
+  if (payEmail && !payEmail.value) {
+    payEmail.focus();
+    return;
+  }
 
   if (payButton) {
     payButton.click();
