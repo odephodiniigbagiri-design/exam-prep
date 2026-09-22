@@ -12,6 +12,7 @@ const supabaseClient = window.supabase.createClient(
 const FUNCTION_BASE = '/api';
 
 let unlocked = false;
+let claimEmail = '';
 
 document.addEventListener('DOMContentLoaded', async () => {
   addAuthenticationUI();
@@ -26,7 +27,9 @@ function addAuthenticationUI() {
   }
 
   const authBox = document.createElement('div');
+
   authBox.id = 'auth-box';
+
   authBox.innerHTML = `
     <div id="login-section">
       <input
@@ -35,17 +38,58 @@ function addAuthenticationUI() {
         placeholder="Email"
         autocomplete="email"
       >
+
       <input
         id="login-password"
         type="password"
         placeholder="Password"
         autocomplete="current-password"
       >
-      <button id="login-button">
+
+      <button id="login-button" type="button">
         Log in
       </button>
     </div>
+
+    <div id="claim-section">
+      <p>
+        Already paid? Set up your login without paying again.
+      </p>
+
+      <input
+        id="claim-email"
+        type="email"
+        placeholder="Email used for payment"
+        autocomplete="email"
+      >
+
+      <button id="claim-link-button" type="button">
+        Email me a login link
+      </button>
+
+      <div id="claim-password-section" hidden>
+        <input
+          id="claim-password"
+          type="password"
+          placeholder="Create a password"
+          autocomplete="new-password"
+        >
+
+        <input
+          id="claim-password-confirm"
+          type="password"
+          placeholder="Confirm password"
+          autocomplete="new-password"
+        >
+
+        <button id="claim-password-button" type="button">
+          Set password and unlock
+        </button>
+      </div>
+    </div>
+
     <p id="auth-message"></p>
+
     <div id="pay-section">
       <input
         id="pay-email"
@@ -53,7 +97,8 @@ function addAuthenticationUI() {
         placeholder="Email for payment"
         autocomplete="email"
       >
-      <button id="pay-button">
+
+      <button id="pay-button" type="button">
         Pay ₦200
       </button>
     </div>
@@ -66,13 +111,22 @@ function addAuthenticationUI() {
     .addEventListener('click', loginWithPassword);
 
   document
+    .getElementById('claim-link-button')
+    .addEventListener('click', sendLegacyLoginLink);
+
+  document
+    .getElementById('claim-password-button')
+    .addEventListener('click', setLegacyPassword);
+
+  document
     .getElementById('pay-button')
     .addEventListener('click', startPayment);
 }
 
 async function loginWithPassword() {
   const email = getEmail('login-email');
-  const password = document.getElementById('login-password').value;
+  const password =
+    document.getElementById('login-password').value;
   const message = document.getElementById('auth-message');
 
   if (!email) {
@@ -85,20 +139,149 @@ async function loginWithPassword() {
     return;
   }
 
+  setButtonDisabled('login-button', true);
   message.textContent = 'Logging in...';
 
-  const { error } = await supabaseClient.auth.signInWithPassword({
-    email,
-    password
-  });
+  try {
+    const { error } =
+      await supabaseClient.auth.signInWithPassword({
+        email,
+        password
+      });
 
-  if (error) {
+    if (error) {
+      throw error;
+    }
+
+    message.textContent = 'Logged in successfully.';
+  } catch (error) {
     console.error(error);
-    message.textContent = error.message;
+    message.textContent =
+      error.message || 'Unable to log in.';
+  } finally {
+    setButtonDisabled('login-button', false);
+  }
+}
+
+async function sendLegacyLoginLink() {
+  const email = getEmail('claim-email');
+  const message = document.getElementById('auth-message');
+  const button = document.getElementById('claim-link-button');
+
+  if (!email) {
+    message.textContent = 'Enter the email used for payment.';
     return;
   }
 
-  message.textContent = '';
+  claimEmail = email;
+  button.disabled = true;
+  message.textContent = 'Sending your login link...';
+
+  try {
+    const { error } =
+      await supabaseClient.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: true,
+          emailRedirectTo: window.location.origin
+        }
+      });
+
+    if (error) {
+      throw error;
+    }
+
+    message.textContent =
+      'If this email belongs to a previous purchase, ' +
+      'we have sent a login link. Check your inbox.';
+  } catch (error) {
+    console.error(error);
+    message.textContent =
+      error.message || 'Unable to send the login link.';
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function setLegacyPassword() {
+  const password =
+    document.getElementById('claim-password').value;
+  const confirmPassword =
+    document.getElementById('claim-password-confirm').value;
+  const message = document.getElementById('auth-message');
+  const button = document.getElementById('claim-password-button');
+
+  if (!password || password.length < 6) {
+    message.textContent =
+      'Password must be at least 6 characters.';
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    message.textContent = 'Passwords do not match.';
+    return;
+  }
+
+  button.disabled = true;
+  message.textContent = 'Setting your password...';
+
+  try {
+    const {
+      data: { session }
+    } = await supabaseClient.auth.getSession();
+
+    if (!session) {
+      throw new Error(
+        'Open the login link from your email before setting a password.'
+      );
+    }
+
+    const { error } =
+      await supabaseClient.auth.updateUser({
+        password
+      });
+
+    if (error) {
+      throw error;
+    }
+
+    const profileResponse = await fetch(
+      `${FUNCTION_BASE}/save-profile`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({})
+      }
+    );
+
+    if (!profileResponse.ok) {
+      const result = await profileResponse.json();
+      throw new Error(
+        result.error || 'Unable to save your profile.'
+      );
+    }
+
+    await checkAccess(session.access_token);
+
+    if (!unlocked) {
+      message.textContent =
+        'Your account is ready, but no successful payment ' +
+        'was found for this email address.';
+      return;
+    }
+
+    message.textContent =
+      'Password created. Your paid access is now unlocked.';
+  } catch (error) {
+    console.error(error);
+    message.textContent =
+      error.message || 'Unable to set your password.';
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function startPayment() {
@@ -111,6 +294,7 @@ async function startPayment() {
     return;
   }
 
+  setButtonDisabled('pay-button', true);
   message.textContent = 'Opening Paystack...';
 
   try {
@@ -128,13 +312,16 @@ async function startPayment() {
     const result = await response.json();
 
     if (!response.ok) {
-      throw new Error(result.error || 'Unable to start payment.');
+      throw new Error(
+        result.error || 'Unable to start payment.'
+      );
     }
 
     window.location.href = result.authorization_url;
   } catch (error) {
     console.error(error);
     message.textContent = error.message;
+    setButtonDisabled('pay-button', false);
   }
 }
 
@@ -144,16 +331,29 @@ async function restoreSession() {
   } = await supabaseClient.auth.getSession();
 
   if (session) {
-    await checkAccess(session.access_token);
+    await handleAuthenticatedSession(session);
   }
 
   supabaseClient.auth.onAuthStateChange(
     async (_event, updatedSession) => {
-      if (updatedSession) {
-        await checkAccess(updatedSession.access_token);
+      if (!updatedSession) {
+        return;
       }
+
+      await handleAuthenticatedSession(updatedSession);
     }
   );
+}
+
+async function handleAuthenticatedSession(session) {
+  const claimPasswordSection =
+    document.getElementById('claim-password-section');
+
+  if (claimPasswordSection && claimEmail) {
+    claimPasswordSection.hidden = false;
+  }
+
+  await checkAccess(session.access_token);
 }
 
 async function checkAccess(accessToken) {
@@ -171,7 +371,9 @@ async function checkAccess(accessToken) {
 
     if (response.ok && result.paid) {
       unlocked = true;
-      window.dispatchEvent(new CustomEvent('paid-access-granted'));
+      window.dispatchEvent(
+        new CustomEvent('paid-access-granted')
+      );
     }
   } catch (error) {
     console.error('Access check failed:', error);
@@ -192,6 +394,14 @@ function getEmail(inputId) {
   }
 
   return email;
+}
+
+function setButtonDisabled(buttonId, disabled) {
+  const button = document.getElementById(buttonId);
+
+  if (button) {
+    button.disabled = disabled;
+  }
 }
 
 window.addEventListener(
