@@ -3,47 +3,74 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Confirming payment</title>
+  <title>Complete your profile</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
-      --bg: #FBF9F4; --surface: #fff; --surface-alt: #F1EEE4; --ink: #1F2A24;
-      --ink-soft: #55605A; --border: #E4DFD3; --pine: #2F4B3C; --pine-deep: #1F3329;
-      --amber: #E0AE55; --brick: #B4432E; --ok: #2E7D4F;
+      --bg: #FBF9F4;
+      --surface: #fff;
+      --surface-alt: #F1EEE4;
+      --ink: #1F2A24;
+      --ink-soft: #55605A;
+      --border: #E4DFD3;
+      --pine: #2F4B3C;
+      --pine-deep: #1F3329;
+      --amber: #E0AE55;
+      --brick: #B4432E;
+      --ok: #2E7D4F;
     }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #14231C; --surface: #1B2D24; --surface-alt: #22362B; --ink: #EDEFE9;
-        --ink-soft: #A9B5AC; --border: #33473C; --pine: #7FBE9C; --pine-deep: #A6D6BB;
-        --amber: #E0AE55; --brick: #E08A78; --ok: #7FBE9C;
-      }
-    }
+
     * { box-sizing: border-box; }
     body {
-      background: var(--bg); color: var(--ink); font-family: 'Inter', sans-serif;
-      max-width: 420px; margin: 0 auto; padding: 40px 20px;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: 'Inter', sans-serif;
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 40px 20px;
     }
-    h1 { font-size: 20px; color: var(--pine-deep); margin: 0 0 10px; }
+    h1 { font-size: 22px; color: var(--pine-deep); margin: 0 0 10px; }
     p { font-size: 14px; color: var(--ink-soft); line-height: 1.5; }
     .card {
-      border: 1px solid var(--border); background: var(--surface-alt);
-      border-radius: 10px; padding: 22px; margin-top: 18px;
+      border: 1px solid var(--border);
+      background: var(--surface-alt);
+      border-radius: 10px;
+      padding: 22px;
+      margin-top: 18px;
     }
-    label { display: block; font-size: 13px; font-weight: 600; margin: 14px 0 6px; }
-    input, select {
-      width: 100%; padding: 11px 12px; border-radius: 8px; border: 1px solid var(--border);
-      background: var(--surface); color: var(--ink); font-family: 'Inter', sans-serif; font-size: 14px;
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      margin: 14px 0 6px;
+    }
+    input {
+      width: 100%;
+      padding: 11px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--ink);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
     }
     button {
-      width: 100%; margin-top: 18px; padding: 13px; border-radius: 8px; border: none;
-      background: var(--amber); color: #211705; font-family: 'Inter', sans-serif;
-      font-size: 15px; font-weight: 700; cursor: pointer;
+      width: 100%;
+      margin-top: 18px;
+      padding: 13px;
+      border-radius: 8px;
+      border: none;
+      background: var(--amber);
+      color: #211705;
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
     }
     button:disabled { opacity: .5; cursor: default; }
     .msg { font-size: 13px; margin-top: 12px; min-height: 16px; }
     .msg.err { color: var(--brick); }
     .msg.ok { color: var(--ok); }
-    a { color: var(--pine-deep); }
     .hidden { display: none; }
   </style>
 </head>
@@ -54,8 +81,20 @@
   <div id="signup-card" class="card hidden">
     <p style="margin-top:0">
       Payment confirmed for <strong id="signup-email"></strong>.
-      Create a password so you can log back in any time — no more email links.
+      Complete your profile and create your account.
     </p>
+
+    <label for="full-name">Full name</label>
+    <input id="full-name" type="text" placeholder="e.g. John Doe">
+
+    <label for="email">Email</label>
+    <input id="email" type="email" placeholder="Email address" readonly>
+
+    <label for="department">Department / course</label>
+    <input id="department" type="text" placeholder="e.g. Medicine and Surgery">
+
+    <label for="phone">Phone number</label>
+    <input id="phone" type="tel" placeholder="e.g. 080XXXXXXXX">
 
     <label for="password">Password</label>
     <input id="password" type="password" autocomplete="new-password" placeholder="At least 6 characters">
@@ -63,13 +102,7 @@
     <label for="confirm-password">Confirm password</label>
     <input id="confirm-password" type="password" autocomplete="new-password">
 
-    <label for="phone">Phone number</label>
-    <input id="phone" type="tel" autocomplete="tel" placeholder="e.g. 080XXXXXXXX">
-
-    <label for="department">Department / course of study</label>
-    <input id="department" type="text" placeholder="e.g. Medicine and Surgery">
-
-    <button id="create-account-button">Create account &amp; unlock</button>
+    <button id="create-account-button">Create account & unlock</button>
     <p class="msg" id="signup-message"></p>
   </div>
 
@@ -87,6 +120,7 @@
     const signupCard = document.getElementById('signup-card');
     const signupEmailLabel = document.getElementById('signup-email');
     const signupMessage = document.getElementById('signup-message');
+    const emailInput = document.getElementById('email');
 
     let verifiedEmail = null;
 
@@ -113,13 +147,14 @@
 
         verifiedEmail = result.email;
         heading.textContent = 'Payment confirmed';
-        message.textContent = 'One last step — create your account below.';
+        message.textContent = 'Finish your profile below.';
         signupEmailLabel.textContent = verifiedEmail;
+        emailInput.value = verifiedEmail;
         signupCard.classList.remove('hidden');
       } catch (error) {
         console.error(error);
         message.textContent =
-          'Payment is not confirmed yet. Wait briefly and refresh this page.';
+          'Payment is not confirmed yet. Please wait a moment and refresh the page.';
       }
     }
 
@@ -128,13 +163,33 @@
       .addEventListener('click', createAccount);
 
     async function createAccount() {
+      const fullName = document.getElementById('full-name').value.trim();
+      const email = emailInput.value.trim().toLowerCase();
+      const department = document.getElementById('department').value.trim();
+      const phone = document.getElementById('phone').value.trim();
       const password = document.getElementById('password').value;
       const confirmPassword = document.getElementById('confirm-password').value;
-      const phone = document.getElementById('phone').value.trim();
-      const department = document.getElementById('department').value.trim();
       const button = document.getElementById('create-account-button');
 
       signupMessage.className = 'msg';
+
+      if (!fullName) {
+        signupMessage.textContent = 'Please enter your full name.';
+        signupMessage.className = 'msg err';
+        return;
+      }
+
+      if (!email || !email.includes('@')) {
+        signupMessage.textContent = 'Please enter a valid email address.';
+        signupMessage.className = 'msg err';
+        return;
+      }
+
+      if (!department) {
+        signupMessage.textContent = 'Please enter your department or course.';
+        signupMessage.className = 'msg err';
+        return;
+      }
 
       if (!password || password.length < 6) {
         signupMessage.textContent = 'Password must be at least 6 characters.';
@@ -153,10 +208,14 @@
 
       try {
         const { data, error } = await supabaseClient.auth.signUp({
-          email: verifiedEmail,
+          email,
           password,
           options: {
-            data: { phone, department },
+            data: {
+              full_name: fullName,
+              phone,
+              department
+            },
             emailRedirectTo: window.location.origin
           }
         });
@@ -164,7 +223,7 @@
         if (error) {
           if (/already registered/i.test(error.message)) {
             signupMessage.innerHTML =
-              'You already have an account with this email. ' +
+              'This email already has an account. ' +
               '<a href="/">Go to the homepage</a> and log in with your password.';
             signupMessage.className = 'msg err';
           } else {
@@ -173,7 +232,6 @@
           return;
         }
 
-        // Mirror phone/department into a queryable profiles table.
         if (data.session) {
           try {
             await fetch('/api/save-profile', {
@@ -182,7 +240,12 @@
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${data.session.access_token}`
               },
-              body: JSON.stringify({ phone, department })
+              body: JSON.stringify({
+                full_name: fullName,
+                email,
+                phone,
+                department
+              })
             });
           } catch (profileError) {
             console.error('Profile save failed:', profileError);
@@ -194,7 +257,7 @@
         } else {
           signupMessage.innerHTML =
             'Account created. Check your email to confirm it, then ' +
-            '<a href="/">log in on the homepage</a> with your password.';
+            '<a href="/">log in on the homepage</a>.';
           signupMessage.className = 'msg ok';
         }
       } catch (error) {
