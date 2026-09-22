@@ -48,32 +48,59 @@ module.exports = async function handler(req, res) {
 
     const email = user.email.trim().toLowerCase();
 
-    let { data: purchase, error } =
+    const { data: purchase, error: purchaseError } =
       await supabase
         .from('purchases')
         .select('id, reference, paid_at, user_id')
-        .eq('user_id', user.id)
+        .eq('email', email)
         .eq('status', 'success')
         .eq('amount_kobo', 20000)
         .limit(1)
         .maybeSingle();
 
-    if (error) {
-      throw error;
+    if (purchaseError) {
+      throw purchaseError;
+    }
+
+    if (!purchase) {
+      return json(res, 200, {
+        paid: false,
+        email,
+        reference: null
+      });
     }
 
     /*
-     * Migration fallback for old payment records.
-     * Once a matching purchase is found, permanently link it
-     * to the authenticated Supabase user.
+     * Link old email-based purchases to the authenticated
+     * Supabase user. This is safe because the user has already
+     * authenticated through Supabase using the verified email.
      */
-    if (!purchase) {
-      const result = await supabase
-        .from('purchasesUse this implementation in the `exam-prep` repository. It does not require old users to pay again.
+    if (!purchase.user_id) {
+      const { error: linkError } =
+        await supabase
+          .from('purchases')
+          .update({
+            user_id: user.id
+          })
+          .eq('id', purchase.id)
+          .is('user_id', null);
 
-## 1. Replace `app.js`
+      if (linkError) {
+        throw linkError;
+      }
+    }
 
-Replace the entire contents of:
+    return json(res, 200, {
+      paid: true,
+      email,
+      reference: purchase.reference
+    });
+  } catch (error) {
+    console.error(error);
 
-```text
-app.js
+    return json(res, 500, {
+      paid: false,
+      error: 'Unable to check access.'
+    });
+  }
+};
