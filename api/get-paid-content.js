@@ -1,11 +1,18 @@
-const { createClient } = require('@supabase/supabase-js');
-
 const {
-  getEnvironment,
-  jsonResponse
-} = require('./_paystack');
+  getSupabaseAdmin
+} = require('../lib/supabase-admin');
 
-exports.handler = async function (event) {
+function jsonResponse(status, data) {
+  return {
+    statusCode: status,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+  };
+}
+
+exports.handler = async function handler(event) {
   try {
     const authorization =
       event.headers.authorization ||
@@ -18,30 +25,33 @@ exports.handler = async function (event) {
       });
     }
 
-    const token = authorization.replace('Bearer ', '');
-
-    const supabase = createClient(
-      getEnvironment('SUPABASE_URL'),
-      getEnvironment('SUPABASE_SERVICE_ROLE_KEY')
-    );
+    const token = authorization.substring(7);
+    const supabase = getSupabaseAdmin();
 
     const {
       data: { user },
       error: userError
     } = await supabase.auth.getUser(token);
 
-    if (userError || !user) {
+    if (userError || !user || !user.email) {
       return jsonResponse(401, {
         error: 'Invalid session.'
       });
     }
 
+    const email = user.email.trim().toLowerCase();
+
+    /*
+     * Use user_id first. The email fallback allows old purchases
+     * to continue working while migration is in progress.
+     */
     const { data: purchase, error: purchaseError } =
       await supabase
         .from('purchases')
-        .select('id')
-        .eq('user_id', user.id)
+        .select('id, user_id, email')
         .eq('status', 'success')
+        .eq('amount_kobo', 20000)
+        .or(`user_id.eq.${user.id},email.eq.${email}`)
         .limit(1)
         .maybeSingle();
 
@@ -53,6 +63,21 @@ exports.handler = async function (event) {
       return jsonResponse(403, {
         error: 'Payment required.'
       });
+    }
+
+    if (!purchase.user_id) {
+      const { error: linkError } =
+        await supabase
+          .from('purchases')
+          .update({
+            user_id: user.id
+          })
+          .eq('id', purchase.id)
+          .is('user_id', null);
+
+      if (linkError) {
+        throw linkError;
+      }
     }
 
     const { data: content, error: contentError } =
