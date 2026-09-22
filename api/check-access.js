@@ -39,18 +39,20 @@ module.exports = async function handler(req, res) {
       error: userError
     } = await supabase.auth.getUser(token);
 
-    if (userError || !user) {
+    if (userError || !user || !user.email) {
       return json(res, 401, {
         paid: false,
         error: 'Invalid login session.'
       });
     }
 
-    const { data: purchase, error } =
+    const email = user.email.trim().toLowerCase();
+
+    let { data: purchase, error } =
       await supabase
         .from('purchases')
-        .select('reference, paid_at')
-        .eq('email', user.email.toLowerCase())
+        .select('id, reference, paid_at, user_id')
+        .eq('user_id', user.id)
         .eq('status', 'success')
         .eq('amount_kobo', 20000)
         .limit(1)
@@ -60,17 +62,18 @@ module.exports = async function handler(req, res) {
       throw error;
     }
 
-    return json(res, 200, {
-      paid: Boolean(purchase),
-      email: user.email,
-      reference: purchase?.reference || null
-    });
-  } catch (error) {
-    console.error(error);
+    /*
+     * Migration fallback for old payment records.
+     * Once a matching purchase is found, permanently link it
+     * to the authenticated Supabase user.
+     */
+    if (!purchase) {
+      const result = await supabase
+        .from('purchasesUse this implementation in the `exam-prep` repository. It does not require old users to pay again.
 
-    return json(res, 500, {
-      paid: false,
-      error: 'Unable to check access.'
-    });
-  }
-};
+## 1. Replace `app.js`
+
+Replace the entire contents of:
+
+```text
+app.js
